@@ -130,6 +130,13 @@ def test_media_token_with_data_image_renders_img(driver_path):
     assert "api/media?path=data" not in html, "data: URI must never route to api/media"
 
 
+def test_markdown_image_with_line_break_before_path_renders_inline(driver_path):
+    html = _render(driver_path, "![Photorealistic cat on a tightrope]\n(/home/joe/.hermes/cache/images/mai_test.png)")
+    assert "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fmai_test.png" in html
+    assert '<img' in html
+    assert "![Photorealistic" not in html
+
+
 def test_markdown_file_image_renders_media_img_not_anchor_bug(driver_path):
     html = _render(driver_path, "![chart](file:///tmp/chart.png)")
     assert "api/media?path=%2Ftmp%2Fchart.png" in html
