@@ -169,6 +169,12 @@ def test_markdown_backslash_cache_traversal_stays_inert(driver_path):
     assert '<img' not in html
 
 
+def test_markdown_percent_filename_renders_inline(driver_path):
+    html = _render(driver_path, "![photo]\n(/home/joe/.hermes/cache/images/photo%25done.png)")
+    assert "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fphoto%25done.png" in html
+    assert '<img' in html
+
+
 def test_markdown_double_encoded_slash_traversal_stays_inert(driver_path):
     html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%252e%252e%252fprivate.png)")
     assert "api/media" not in html

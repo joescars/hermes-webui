@@ -8054,17 +8054,19 @@ function renderMd(raw){
     if(value.startsWith('~')||value.includes('\\'))return null;
     try{
       const decoded=decodeURIComponent(value);
-      if(decoded.includes('\\')||decoded.includes('%')||/(^|[\\/])\.\.(?:[\\/]|$)/.test(decoded))return null;
+      if(decoded.includes('\\')||/(^|[\\/])\.\.(?:[\\/]|$)/.test(decoded))return null;
+      if(/%(?:2f|5c)/i.test(decoded)||/(^|\/)%(?:2e){2}(?:%2f|%5c|\/|$)/i.test(decoded))return null;
       return decoded;
     }catch(_){return null;}
   };
+  const _bareHermesImageFileUri=(path)=>`file://${path.split('/').map(encodeURIComponent).join('/')}`;
   s=s.replace(/!\[([^\]]*)\](?:[ \t]*\r?\n[ \t]*|[ \t]*)\([ \t]*([^\)\r\n]+?)[ \t]*\)/g,(_,alt,rawUrl)=>{
     const url=String(rawUrl||'').trim();
     const decodedBare=_decodeBareHermesImagePath(url);
     const bare=decodedBare!==null&&_bareHermesImageCacheRe.test(decodedBare);
     const explicit=/^(?:https?:\/\/|file:\/\/|data:image\/)/i.test(url);
     if(!explicit&&!bare)return `![${alt}](${url})`;
-    const normalized=bare?`file://${decodedBare}`:url;
+    const normalized=bare?_bareHermesImageFileUri(decodedBare):url;
     return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
   });
   // Outer link pass for labeled links in plain paragraphs (outside table cells).
