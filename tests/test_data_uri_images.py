@@ -169,8 +169,14 @@ def test_markdown_backslash_cache_traversal_stays_inert(driver_path):
     assert '<img' not in html
 
 
-def test_markdown_malformed_cache_escape_stays_inert(driver_path):
-    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/bad%2.png)")
+def test_markdown_double_encoded_slash_traversal_stays_inert(driver_path):
+    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%252e%252e%252fprivate.png)")
+    assert "api/media" not in html
+    assert '<img' not in html
+
+
+def test_markdown_double_encoded_backslash_traversal_stays_inert(driver_path):
+    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%252e%252e%255cprivate.png)")
     assert "api/media" not in html
     assert '<img' not in html
 

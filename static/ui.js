@@ -8054,7 +8054,7 @@ function renderMd(raw){
     if(value.startsWith('~')||value.includes('\\'))return null;
     try{
       const decoded=decodeURIComponent(value);
-      if(decoded.includes('\\')||/(^|[\\/])\.\.(?:[\\/]|$)/.test(decoded))return null;
+      if(decoded.includes('\\')||decoded.includes('%')||/(^|[\\/])\.\.(?:[\\/]|$)/.test(decoded))return null;
       return decoded;
     }catch(_){return null;}
   };
