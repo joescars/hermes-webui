@@ -8045,15 +8045,26 @@ function renderMd(raw){
   // Runs AFTER the table pass (images in table cells are handled by inlineMd() above).
   // Runs BEFORE the outer [label](url) link pass so the image is not consumed as a plain link.
   // Hermes image providers may emit a bare absolute cache path on the next line.
-  // Restrict that compatibility form to image files below a cache/images segment;
-  // root-relative web URLs, protocol-relative URLs, and traversal remain inert.
-  const _bareHermesImageCacheRe=/^(?:\/(?!\/)|~\/)[^\)\r\n]*\/cache\/images\/[^\/()\r\n]+\.(?:png|jpe?g|gif|webp|avif|bmp|ico)(?:[?#][^\)\r\n]*)?$/i;
+  // Restrict that compatibility form to decoded image files below a cache/images
+  // segment; root-relative web URLs, protocol-relative URLs, traversal, malformed
+  // escapes, and tilde paths remain inert.
+  const _bareHermesImageCacheRe=/^\/(?!\/)[^\)\r\n]*\/cache\/images\/[^\/()\r\n]+\.(?:png|jpe?g|gif|webp|avif|bmp|ico)(?:[?#][^\)\r\n]*)?$/i;
+  const _decodeBareHermesImagePath=(raw)=>{
+    const value=String(raw||'').trim();
+    if(value.startsWith('~')||value.includes('\\'))return null;
+    try{
+      const decoded=decodeURIComponent(value);
+      if(decoded.includes('\\')||/(^|[\\/])\.\.(?:[\\/]|$)/.test(decoded))return null;
+      return decoded;
+    }catch(_){return null;}
+  };
   s=s.replace(/!\[([^\]]*)\](?:[ \t]*\r?\n[ \t]*|[ \t]*)\([ \t]*([^\)\r\n]+?)[ \t]*\)/g,(_,alt,rawUrl)=>{
     const url=String(rawUrl||'').trim();
-    const hasTraversal=/(^|\/)\.\.(?:\/|$)/.test(url);
-    const bare=_bareHermesImageCacheRe.test(url)&&!hasTraversal;
-    if(hasTraversal||(!/^(?:https?:\/\/|file:\/\/|data:image\/)/i.test(url)&&!bare))return `![${alt}](${url})`;
-    const normalized=bare?`file://${url}`:url;
+    const decodedBare=_decodeBareHermesImagePath(url);
+    const bare=decodedBare!==null&&_bareHermesImageCacheRe.test(decodedBare);
+    const explicit=/^(?:https?:\/\/|file:\/\/|data:image\/)/i.test(url);
+    if(!explicit&&!bare)return `![${alt}](${url})`;
+    const normalized=bare?`file://${decodedBare}`:url;
     return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
   });
   // Outer link pass for labeled links in plain paragraphs (outside table cells).

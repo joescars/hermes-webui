@@ -157,8 +157,26 @@ def test_markdown_blank_line_does_not_join_image_paragraphs(driver_path):
     assert '<img' not in html
 
 
-def test_markdown_cache_traversal_stays_inert(driver_path):
-    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/../secrets.png)")
+def test_markdown_encoded_cache_traversal_stays_inert(driver_path):
+    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%2e%2e%2fsecrets.png)")
+    assert "api/media" not in html
+    assert '<img' not in html
+
+
+def test_markdown_backslash_cache_traversal_stays_inert(driver_path):
+    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/..%5csecrets.png)")
+    assert "api/media" not in html
+    assert '<img' not in html
+
+
+def test_markdown_malformed_cache_escape_stays_inert(driver_path):
+    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/bad%2.png)")
+    assert "api/media" not in html
+    assert '<img' not in html
+
+
+def test_markdown_tilde_cache_path_stays_inert(driver_path):
+    html = _render(driver_path, "![x]\n(~/cache/images/mai_test.png)")
     assert "api/media" not in html
     assert '<img' not in html
 
