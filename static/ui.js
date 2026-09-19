@@ -8044,7 +8044,18 @@ function renderMd(raw){
   // #487: Outer image pass — handles ![alt](url) in plain paragraphs (outside tables/lists).
   // Runs AFTER the table pass (images in table cells are handled by inlineMd() above).
   // Runs BEFORE the outer [label](url) link pass so the image is not consumed as a plain link.
-  s=s.replace(/!\[([^\]]*)\]\s*\(\s*((?:https?:\/\/|file:\/\/|data:image\/)[^\)]+?)\s*\)/g,(_,alt,url)=>(typeof _mdImageHtml==='function')?_mdImageHtml(alt,url.trim()):`<img src="${url.trim().replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`);
+  // Hermes image providers may emit a bare absolute cache path on the next line.
+  // Restrict that compatibility form to image files below a cache/images segment;
+  // root-relative web URLs, protocol-relative URLs, and traversal remain inert.
+  const _bareHermesImageCacheRe=/^(?:\/(?!\/)|~\/)[^\)\r\n]*\/cache\/images\/[^\/()\r\n]+\.(?:png|jpe?g|gif|webp|avif|bmp|ico)(?:[?#][^\)\r\n]*)?$/i;
+  s=s.replace(/!\[([^\]]*)\](?:[ \t]*\r?\n[ \t]*|[ \t]*)\([ \t]*([^\)\r\n]+?)[ \t]*\)/g,(_,alt,rawUrl)=>{
+    const url=String(rawUrl||'').trim();
+    const hasTraversal=/(^|\/)\.\.(?:\/|$)/.test(url);
+    const bare=_bareHermesImageCacheRe.test(url)&&!hasTraversal;
+    if(hasTraversal||(!/^(?:https?:\/\/|file:\/\/|data:image\/)/i.test(url)&&!bare))return `![${alt}](${url})`;
+    const normalized=bare?`file://${url}`:url;
+    return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
+  });
   // Outer link pass for labeled links in plain paragraphs (outside table cells).
   // Runs AFTER the table pass so table cells are processed by inlineMd() only.
   // Stash existing <a> tags first to avoid re-linking already-linked URLs.
