@@ -7785,15 +7785,23 @@ function renderMd(raw){
     }
     return lead+'\x00P'+(_preBlock_stash.length-1)+'\x00';
   });
-  // Fence placeholders are now opaque. Protect raw <pre> and inline <code>
-  // only outside fences, before inline-backtick matching can span code regions.
+  // Scan left-to-right after fenced blocks are opaque. A backtick span that
+  // starts before raw HTML is escaped as inline-code text; a raw <pre>/<code>
+  // element that starts first gets its own placeholder. This preserves source
+  // order and prevents backticks inside one raw element pairing across others.
   const rawPreStash=[];
-  s=s.replace(/(<pre\b[^>]*>[\s\S]*?<\/pre>)/gi,m=>{rawPreStash.push(m);return `\x00R${rawPreStash.length-1}\x00`;});
-  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>{
-    rawCodeStash.push(t);
+  s=s.replace(/`([^`\n]+)`|(<pre\b[^>]*>[\s\S]*?<\/pre>)|(<code>([^<]*?)<\/code>)/gi,(match,inline,pre,code,codeText)=>{
+    if(inline!==undefined){
+      fence_stash.push('<code>'+esc(inline)+'</code>');
+      return '\x00F'+(fence_stash.length-1)+'\x00';
+    }
+    if(pre!==undefined){
+      rawPreStash.push(pre);
+      return `\x00R${rawPreStash.length-1}\x00`;
+    }
+    rawCodeStash.push(codeText);
     return '\x00RC'+(rawCodeStash.length-1)+'\x00';
   });
-  s=s.replace(/`([^`\n]+)`/g,(_,c)=>{fence_stash.push('<code>'+esc(c)+'</code>');return '\x00F'+(fence_stash.length-1)+'\x00';});
   // Math stash: protect $$..$$ and $..$ from markdown processing
   // Runs AFTER fence_stash so backtick code spans protect their dollar-sign contents
   const math_stash=[];

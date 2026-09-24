@@ -101,6 +101,38 @@ def _check_markdown_code_rendering(page, renderer_path):
             "expectedImage": None,
         },
         {
+            "name": "inline raw code tag displays literally in prose",
+            "markdown": "Explain `<code>npm test</code>` syntax.",
+            "expectedText": "Explain <code>npm test</code> syntax.",
+            "expectedCode": ["<code>npm test</code>"],
+            "expectedCodeParents": ["P"],
+            "expectedImage": None,
+        },
+        {
+            "name": "inline raw pre tag displays literally in prose",
+            "markdown": "Use `<pre>block</pre>` for preformatted text.",
+            "expectedText": "Use <pre>block</pre> for preformatted text.",
+            "expectedCode": ["<pre>block</pre>"],
+            "expectedCodeParents": ["P"],
+            "expectedImage": None,
+        },
+        {
+            "name": "inline raw code tag displays literally in list item",
+            "markdown": "- Wrap with `<code>x</code>`",
+            "expectedText": "Wrap with <code>x</code>",
+            "expectedCode": ["<code>x</code>"],
+            "expectedCodeParents": ["LI"],
+            "expectedImage": None,
+        },
+        {
+            "name": "inline raw code tag displays literally in table cell",
+            "markdown": "| Example | Meaning |\n| --- | --- |\n| `<code>x</code>` | literal |",
+            "expectedText": "\nExampleMeaning<code>x</code>literal\n",
+            "expectedCode": ["<code>x</code>"],
+            "expectedCodeParents": ["TD"],
+            "expectedImage": None,
+        },
+        {
             "name": "raw-code backtick before image and inline code",
             "markdown": "Type <code>`</code> then see ![i](https://e.x/i.png) and `x`.",
             "expectedText": "Type ` then see  and x.",
@@ -116,7 +148,8 @@ def _check_markdown_code_rendering(page, renderer_path):
           return {
             name: input.name,
             text: root.textContent,
-            code: Array.from(root.querySelectorAll('code'), node => node.textContent),
+            "code": Array.from(root.querySelectorAll('code'), node => node.textContent),
+            "codeParents": Array.from(root.querySelectorAll('code'), node => node.parentElement.tagName),
             images: Array.from(root.querySelectorAll('img'), node => node.getAttribute('src')),
             "html": root.innerHTML,
             "leakedStash": /\\u0000F\\d+\\u0000|\\bF\\d+\\b/.test(root.textContent),
@@ -130,6 +163,8 @@ def _check_markdown_code_rendering(page, renderer_path):
             failures.append(f"{case['name']}: text={result['text']!r}; html={result['html']!r}")
         if result["code"] != case["expectedCode"]:
             failures.append(f"{case['name']}: code={result['code']!r}")
+        if "expectedCodeParents" in case and result["codeParents"] != case["expectedCodeParents"]:
+            failures.append(f"{case['name']}: code parents={result['codeParents']!r}; html={result['html']!r}")
         expected_images = [case["expectedImage"]] if case["expectedImage"] else []
         if result["images"] != expected_images:
             failures.append(f"{case['name']}: images={result['images']!r}; html={result['html']!r}")
