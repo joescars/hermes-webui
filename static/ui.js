@@ -7711,6 +7711,14 @@ function renderMd(raw){
   // This prevents double-escaping when LLM outputs entities like &lt; &gt; &amp;
   const decode=s=>s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
   s=decode(s);
+  // Keep each raw <code> element opaque before the inline-backtick pass.
+  // Otherwise a literal backtick can pair with one in another raw element,
+  // leaking an inline-code stash token or consuming intervening Markdown.
+  const rawCodeStash=[];
+  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>{
+    rawCodeStash.push(t);
+    return '\x00RC'+(rawCodeStash.length-1)+'\x00';
+  });
   // Pre-pass: convert safe inline HTML tags the model may emit into their
   // markdown equivalents so the pipeline can render them correctly.
   // Only runs OUTSIDE fenced code blocks and backtick spans (stash + restore).
@@ -7827,14 +7835,8 @@ function renderMd(raw){
   };
   s=s.replace(/<em>([\s\S]*?)<\/em>/gi,(_,t)=>_emphasis(t));
   s=s.replace(/<i>([\s\S]*?)<\/i>/gi,(_,t)=>_emphasis(t));
-  // Keep each raw <code> element opaque through the outer Markdown passes.
-  // Converting it to backticks here lets a later global backtick scan pair
-  // delimiters across separate elements and swallow intervening image syntax.
-  const rawCodeStash=[];
-  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>{
-    rawCodeStash.push(t);
-    return '\x00RC'+(rawCodeStash.length-1)+'\x00';
-  });
+  // Raw code content is already protected by the earlier rawCodeStash token;
+  // do not convert backticks to markup again here.
   // Convert <br> to a newline, EXCEPT inside genuine markdown table rows — there a
   // newline would split the row and destroy the table. No sentinel token is used on
   // purpose: any fixed placeholder is attacker-suppliable in message text and would be
@@ -8313,7 +8315,7 @@ function renderMd(raw){
   s=s.replace(/\x00B(\d+)\x00/g,(_,i)=>_al_stash[+i]);
   // Raw <code> elements stay opaque through all Markdown passes; restore their
   // escaped contents only after Markdown links/images and autolinking are done.
-  s=s.replace(/\x00RC(\d+)\x00/g,(_,i)=>`<code>${esc(rawCodeStash[+i])}</code>`);
+  s=s.replace(/\x00RC(\d+)\x00/g,(_,i)=>`<code>${esc(rawCodeStash[+i]).replace(/`/g,'&#96;')}</code>`);
 
   // These will be rendered by renderKatexBlocks() after DOM insertion
   s=s.replace(/\x00M(\d+)\x00/g,(_,i)=>{
