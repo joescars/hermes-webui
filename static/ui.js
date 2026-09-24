@@ -7827,7 +7827,14 @@ function renderMd(raw){
   };
   s=s.replace(/<em>([\s\S]*?)<\/em>/gi,(_,t)=>_emphasis(t));
   s=s.replace(/<i>([\s\S]*?)<\/i>/gi,(_,t)=>_emphasis(t));
-  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>'`'+t+'`');
+  // Keep each raw <code> element opaque through the outer Markdown passes.
+  // Converting it to backticks here lets a later global backtick scan pair
+  // delimiters across separate elements and swallow intervening image syntax.
+  const rawCodeStash=[];
+  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>{
+    rawCodeStash.push(t);
+    return '\x00RC'+(rawCodeStash.length-1)+'\x00';
+  });
   // Convert <br> to a newline, EXCEPT inside genuine markdown table rows — there a
   // newline would split the row and destroy the table. No sentinel token is used on
   // purpose: any fixed placeholder is attacker-suppliable in message text and would be
@@ -8111,12 +8118,9 @@ function renderMd(raw){
     _outerImageCodeRanges.push([offset,offset+code.length]);
     return code;
   });
-  // Raw HTML <code> is converted to backticks earlier in the pipeline, after
-  // the initial code-span stash. Protect those generated spans here too.
-  s.replace(/`[^`\n]+`/g,(code,offset)=>{
-    _outerImageCodeRanges.push([offset,offset+code.length]);
-    return code;
-  });
+  // Raw <code> elements are placeholders now, so only code tags produced by
+  // the inline-code pass need guarding. Do not pair backticks globally: a
+  // backtick inside raw code must not pair with a later code element.
   _outerImageCodeRanges.sort((a,b)=>a[0]-b[0]);
   let _outerImageCodeRange=0;
   s=s.replace(/!\[([^\]]*)\](?:[ \t]*\r?\n[ \t]*|[ \t]*)\([ \t]*([^\)\r\n]+?)[ \t]*\)/g,(match,alt,rawUrl,offset)=>{
@@ -8307,7 +8311,10 @@ function renderMd(raw){
     return `<a href="${clean}" target="_blank" rel="noopener">${esc(clean)}</a>${trail}`;
   });
   s=s.replace(/\x00B(\d+)\x00/g,(_,i)=>_al_stash[+i]);
-  // Restore math stash → katex placeholder spans/divs
+  // Raw <code> elements stay opaque through all Markdown passes; restore their
+  // escaped contents only after Markdown links/images and autolinking are done.
+  s=s.replace(/\x00RC(\d+)\x00/g,(_,i)=>`<code>${esc(rawCodeStash[+i])}</code>`);
+
   // These will be rendered by renderKatexBlocks() after DOM insertion
   s=s.replace(/\x00M(\d+)\x00/g,(_,i)=>{
     const item=math_stash[+i];

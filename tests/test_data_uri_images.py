@@ -306,3 +306,10 @@ def test_onerror_attribute_stripped_from_data_image(driver_path):
     html = _render(driver_path, f'<img src="{PNG_URI}" onerror="alert(1)">')
     assert "onerror" not in html
     assert f'src="{PNG_URI}"' in html
+
+
+def test_image_between_raw_code_elements_still_renders(driver_path):
+    markdown = "<code>first`last</code> ![x](https://example.test/a.png) <code>end</code>"
+    html = _render(driver_path, markdown)
+    assert html.count("<img") == 1
+    assert 'src="https://example.test/a.png"' in html
