@@ -94,6 +94,13 @@ def _check_markdown_code_rendering(page, renderer_path):
             "expectedImage": None,
         },
         {
+            "name": "fenced code displays literal code tags",
+            "markdown": "```html\n<code>foo</code>\n```",
+            "expectedText": "html<code>foo</code>",
+            "expectedCode": ["<code>foo</code>"],
+            "expectedImage": None,
+        },
+        {
             "name": "raw-code backtick before image and inline code",
             "markdown": "Type <code>`</code> then see ![i](https://e.x/i.png) and `x`.",
             "expectedText": "Type ` then see  and x.",

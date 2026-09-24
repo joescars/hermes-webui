@@ -7711,14 +7711,8 @@ function renderMd(raw){
   // This prevents double-escaping when LLM outputs entities like &lt; &gt; &amp;
   const decode=s=>s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
   s=decode(s);
-  // Keep each raw <code> element opaque before the inline-backtick pass.
-  // Otherwise a literal backtick can pair with one in another raw element,
-  // leaking an inline-code stash token or consuming intervening Markdown.
+  // Keep raw-code stash for restoration, but populate it after fence extraction.
   const rawCodeStash=[];
-  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>{
-    rawCodeStash.push(t);
-    return '\x00RC'+(rawCodeStash.length-1)+'\x00';
-  });
   // Pre-pass: convert safe inline HTML tags the model may emit into their
   // markdown equivalents so the pipeline can render them correctly.
   // Only runs OUTSIDE fenced code blocks and backtick spans (stash + restore).
@@ -7791,6 +7785,14 @@ function renderMd(raw){
     }
     return lead+'\x00P'+(_preBlock_stash.length-1)+'\x00';
   });
+  // Fence placeholders are now opaque. Protect raw <pre> and inline <code>
+  // only outside fences, before inline-backtick matching can span code regions.
+  const rawPreStash=[];
+  s=s.replace(/(<pre\b[^>]*>[\s\S]*?<\/pre>)/gi,m=>{rawPreStash.push(m);return `\x00R${rawPreStash.length-1}\x00`;});
+  s=s.replace(/<code>([^<]*?)<\/code>/gi,(_,t)=>{
+    rawCodeStash.push(t);
+    return '\x00RC'+(rawCodeStash.length-1)+'\x00';
+  });
   s=s.replace(/`([^`\n]+)`/g,(_,c)=>{fence_stash.push('<code>'+esc(c)+'</code>');return '\x00F'+(fence_stash.length-1)+'\x00';});
   // Math stash: protect $$..$$ and $..$ from markdown processing
   // Runs AFTER fence_stash so backtick code spans protect their dollar-sign contents
@@ -7807,11 +7809,6 @@ function renderMd(raw){
   // Match a single literal backslash before the delimiter (the common LLM form).
   s=s.replace(/\\\((.+?)\\\)/g,(_,m)=>{math_stash.push({type:'inline',src:m});return '\x00M'+(math_stash.length-1)+'\x00';});
   // Safe tag → markdown equivalent (these produce the same output as **text** etc.)
-  // Stash raw <pre> blocks so the inline <code> rewrite below does not run
-  // inside them. Running that rewrite in <pre> content can introduce stray
-  // backticks for multiline code and break subsequent code-box rendering.
-  const rawPreStash=[];
-  s=s.replace(/(<pre\b[^>]*>[\s\S]*?<\/pre>)/gi,m=>{rawPreStash.push(m);return `\x00R${rawPreStash.length-1}\x00`;});
   // Bare file:// artifact links → media. Some gateway/tool surfaces emit bare
   // file:// links for local artifacts instead of MEDIA: tokens; browser clients
   // cannot open the server filesystem directly, so route them through /api/media.
