@@ -88,7 +88,12 @@ eval(extractFunc('renderMd'));
 
 let buf = '';
 process.stdin.on('data', c => { buf += c; });
-process.stdin.on('end', () => { process.stdout.write(renderMd(buf)); });
+process.stdin.on('end', () => {
+  const input = process.argv[3] === '--lone-surrogate'
+    ? '![x]\n(/home/joe/.hermes/cache/images/x\uD800.png)'
+    : buf;
+  process.stdout.write(renderMd(input));
+});
 """
 
 
@@ -99,9 +104,9 @@ def driver_path(tmp_path_factory):
     return str(path)
 
 
-def _render(driver_path: str, markdown: str) -> str:
+def _render(driver_path: str, markdown: str, *driver_args: str) -> str:
     result = subprocess.run(
-        [NODE, driver_path, str(REPO_ROOT / "static" / "ui.js")],
+        [NODE, driver_path, str(REPO_ROOT / "static" / "ui.js"), *driver_args],
         input=markdown,
         capture_output=True,
         text=True,
@@ -135,6 +140,47 @@ def test_markdown_image_with_line_break_before_bare_cache_path_renders_inline(dr
     assert "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fmai_test.png" in html
     assert '<img' in html
     assert "![Photorealistic" not in html
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        "`![x](/home/joe/.hermes/cache/images/x.png)`",
+        "- `![x](/home/joe/.hermes/cache/images/x.png)`",
+        "| code |\n| --- |\n| `![x](/home/joe/.hermes/cache/images/x.png)` |",
+    ],
+    ids=["paragraph", "list", "table"],
+)
+def test_markdown_bare_cache_image_inside_inline_code_stays_code(driver_path, markdown):
+    html = _render(driver_path, markdown)
+    assert "api/media" not in html
+    assert "<img" not in html
+    assert "<code>![x](/home/joe/.hermes/cache/images/x.png)</code>" in html
+
+
+def test_markdown_lone_surrogate_cache_path_stays_inert(driver_path):
+    # The surrogate is constructed inside Node; text-mode stdin would replace it
+    # with U+FFFD before renderMd() can exercise encodeURIComponent().
+    html = _render(driver_path, "", "--lone-surrogate")
+    assert "api/media" not in html
+    assert "<img" not in html
+    assert "![x]" in html and "cache/images/" in html
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ("https://example.test/chart.png", "src=\"https://example.test/chart.png\""),
+        ("file:///tmp/chart.png", "api/media?path=%2Ftmp%2Fchart.png"),
+        (PNG_URI, PNG_URI),
+    ],
+    ids=["https", "file", "data-image"],
+)
+def test_explicit_markdown_image_in_table_cell_still_renders(driver_path, target, expected):
+    html = _render(driver_path, f"| image |\n| --- |\n| ![chart]({target}) |")
+    assert "<table>" in html
+    assert "<img" in html
+    assert expected in html
 
 
 def test_markdown_root_relative_web_image_stays_unchanged(driver_path):
