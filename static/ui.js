@@ -8111,6 +8111,13 @@ function renderMd(raw){
     _outerImageCodeRanges.push([offset,offset+code.length]);
     return code;
   });
+  // Raw HTML <code> is converted to backticks earlier in the pipeline, after
+  // the initial code-span stash. Protect those generated spans here too.
+  s.replace(/`[^`\n]+`/g,(code,offset)=>{
+    _outerImageCodeRanges.push([offset,offset+code.length]);
+    return code;
+  });
+  _outerImageCodeRanges.sort((a,b)=>a[0]-b[0]);
   let _outerImageCodeRange=0;
   s=s.replace(/!\[([^\]]*)\](?:[ \t]*\r?\n[ \t]*|[ \t]*)\([ \t]*([^\)\r\n]+?)[ \t]*\)/g,(match,alt,rawUrl,offset)=>{
     while(_outerImageCodeRange<_outerImageCodeRanges.length&&_outerImageCodeRanges[_outerImageCodeRange][1]<=offset)_outerImageCodeRange++;

@@ -158,6 +158,21 @@ def test_markdown_bare_cache_image_inside_inline_code_stays_code(driver_path, ma
     assert "<code>![x](/home/joe/.hermes/cache/images/x.png)</code>" in html
 
 
+@pytest.mark.parametrize(
+    "code_markup",
+    [
+        "<code>![x](/home/joe/.hermes/cache/images/x.png)</code>",
+        "&lt;code&gt;![x](/home/joe/.hermes/cache/images/x.png)&lt;/code&gt;",
+    ],
+    ids=["raw-html-code", "entity-escaped-code"],
+)
+def test_markdown_image_inside_code_markup_stays_literal(driver_path, code_markup):
+    html = _render(driver_path, f"See {code_markup} for the syntax.")
+    assert "api/media" not in html
+    assert "<img" not in html
+    assert "![x](/home/joe/.hermes/cache/images/x.png)" in html
+
+
 def test_markdown_lone_surrogate_cache_path_stays_inert(driver_path):
     # The surrogate is constructed inside Node; text-mode stdin would replace it
     # with U+FFFD before renderMd() can exercise encodeURIComponent().
