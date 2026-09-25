@@ -158,7 +158,7 @@ def _check_markdown_code_rendering(page, renderer_path):
         inputs,
     )
     failures = []
-    for case, result in zip(inputs, results):
+    for case, result in zip(inputs, results, strict=True):
         if result["text"] != case["expectedText"]:
             failures.append(f"{case['name']}: text={result['text']!r}; html={result['html']!r}")
         if result["code"] != case["expectedCode"]:
