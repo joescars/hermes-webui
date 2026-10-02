@@ -384,7 +384,7 @@ def main():
                         )
                         failures.extend(f"  [markdown renderer] {failure}" for failure in renderer_failures)
                         if not renderer_failures:
-                            print("OK  markdown raw-code/backtick regressions — Chromium + production renderMd()")
+                            print("OK  Markdown renderer regressions — Chromium + production renderMd()")
                     except Exception as exc:
                         failures.append(f"  [markdown renderer] browser regression check failed: {exc}")
 

@@ -91,7 +91,7 @@ let buf = '';
 process.stdin.on('data', c => { buf += c; });
 process.stdin.on('end', () => {
   const input = process.argv[3] === '--lone-surrogate'
-    ? '![x]\n(/home/joe/.hermes/cache/images/x\uD800.png)'
+    ? '![x]\n(/workspace/user/.hermes/cache/images/x\uD800.png)'
     : buf;
   process.stdout.write(renderMd(input));
 });
@@ -137,8 +137,8 @@ def test_media_token_with_data_image_renders_img(driver_path):
 
 
 def test_markdown_image_with_line_break_before_bare_cache_path_renders_inline(driver_path):
-    html = _render(driver_path, "![Photorealistic cat on a tightrope]\n(/home/joe/.hermes/cache/images/mai_test.png)")
-    assert "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fmai_test.png" in html
+    html = _render(driver_path, "![Photorealistic cat on a tightrope]\n(/workspace/user/.hermes/cache/images/mai_test.png)")
+    assert "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fmai_test.png" in html
     assert '<img' in html
     assert "![Photorealistic" not in html
 
@@ -146,9 +146,9 @@ def test_markdown_image_with_line_break_before_bare_cache_path_renders_inline(dr
 @pytest.mark.parametrize(
     "markdown",
     [
-        "`![x](/home/joe/.hermes/cache/images/x.png)`",
-        "- `![x](/home/joe/.hermes/cache/images/x.png)`",
-        "| code |\n| --- |\n| `![x](/home/joe/.hermes/cache/images/x.png)` |",
+        "`![x](/workspace/user/.hermes/cache/images/x.png)`",
+        "- `![x](/workspace/user/.hermes/cache/images/x.png)`",
+        "| code |\n| --- |\n| `![x](/workspace/user/.hermes/cache/images/x.png)` |",
     ],
     ids=["paragraph", "list", "table"],
 )
@@ -156,14 +156,14 @@ def test_markdown_bare_cache_image_inside_inline_code_stays_code(driver_path, ma
     html = _render(driver_path, markdown)
     assert "api/media" not in html
     assert "<img" not in html
-    assert "<code>![x](/home/joe/.hermes/cache/images/x.png)</code>" in html
+    assert "<code>![x](/workspace/user/.hermes/cache/images/x.png)</code>" in html
 
 
 @pytest.mark.parametrize(
     "code_markup",
     [
-        "<code>![x](/home/joe/.hermes/cache/images/x.png)</code>",
-        "&lt;code&gt;![x](/home/joe/.hermes/cache/images/x.png)&lt;/code&gt;",
+        "<code>![x](/workspace/user/.hermes/cache/images/x.png)</code>",
+        "&lt;code&gt;![x](/workspace/user/.hermes/cache/images/x.png)&lt;/code&gt;",
     ],
     ids=["raw-html-code", "entity-escaped-code"],
 )
@@ -171,7 +171,7 @@ def test_markdown_image_inside_code_markup_stays_literal(driver_path, code_marku
     html = _render(driver_path, f"See {code_markup} for the syntax.")
     assert "api/media" not in html
     assert "<img" not in html
-    assert "![x](/home/joe/.hermes/cache/images/x.png)" in html
+    assert "![x](/workspace/user/.hermes/cache/images/x.png)" in html
 
 
 def test_markdown_lone_surrogate_cache_path_stays_inert(driver_path):
@@ -214,37 +214,37 @@ def test_markdown_protocol_relative_image_stays_unchanged(driver_path):
 
 
 def test_markdown_blank_line_does_not_join_image_paragraphs(driver_path):
-    html = _render(driver_path, "![label]\n\n(/home/joe/.hermes/cache/images/mai_test.png)")
+    html = _render(driver_path, "![label]\n\n(/workspace/user/.hermes/cache/images/mai_test.png)")
     assert "api/media" not in html
     assert '<img' not in html
 
 
 def test_markdown_encoded_cache_traversal_stays_inert(driver_path):
-    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%2e%2e%2fsecrets.png)")
+    html = _render(driver_path, "![x]\n(/workspace/user/.hermes/cache/images/%2e%2e%2fsecrets.png)")
     assert "api/media" not in html
     assert '<img' not in html
 
 
 def test_markdown_backslash_cache_traversal_stays_inert(driver_path):
-    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/..%5csecrets.png)")
+    html = _render(driver_path, "![x]\n(/workspace/user/.hermes/cache/images/..%5csecrets.png)")
     assert "api/media" not in html
     assert '<img' not in html
 
 
 def test_markdown_percent_filename_renders_inline(driver_path):
-    html = _render(driver_path, "![photo]\n(/home/joe/.hermes/cache/images/photo%25done.png)")
-    assert "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fphoto%25done.png" in html
+    html = _render(driver_path, "![photo]\n(/workspace/user/.hermes/cache/images/photo%25done.png)")
+    assert "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fphoto%25done.png" in html
     assert '<img' in html
 
 
 def test_markdown_double_encoded_slash_traversal_stays_inert(driver_path):
-    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%252e%252e%252fprivate.png)")
+    html = _render(driver_path, "![x]\n(/workspace/user/.hermes/cache/images/%252e%252e%252fprivate.png)")
     assert "api/media" not in html
     assert '<img' not in html
 
 
 def test_markdown_double_encoded_backslash_traversal_stays_inert(driver_path):
-    html = _render(driver_path, "![x]\n(/home/joe/.hermes/cache/images/%252e%252e%255cprivate.png)")
+    html = _render(driver_path, "![x]\n(/workspace/user/.hermes/cache/images/%252e%252e%255cprivate.png)")
     assert "api/media" not in html
     assert '<img' not in html
 
