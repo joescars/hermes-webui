@@ -2901,11 +2901,12 @@ function _inlineMediaHtmlForRef(ref, sessionId, altText){
   const localKind=_mediaKindForName(ref);
   // localArtifactCard(...)
   if(localKind==='image'){
-    const safeName=esc(altText===undefined?(ref.split('/').pop()||'image'):altText);
+    const safeName=esc(ref.split('/').pop()||'image');
+    const safeAlt=esc(altText===undefined?(ref.split('/').pop()||'image'):altText);
     const tt=(typeof t==='function')?t:(key=>({media_download:'Download'}[key]||key));
     const dlLabel=esc(tt('media_download'));
     const dlSvg='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
-    return `<span class="msg-artifact-image"><img class="msg-media-img" src="${esc(apiUrl)}" alt="${safeName}" loading="lazy"><a class="msg-artifact-download" href="${esc(apiUrl)}" download="${safeName}" title="${dlLabel}" aria-label="${dlLabel}" onclick="event.stopPropagation()">${dlSvg}</a></span>`;
+    return `<span class="msg-artifact-image"><img class="msg-media-img" src="${esc(apiUrl)}" alt="${safeAlt}" loading="lazy"><a class="msg-artifact-download" href="${esc(apiUrl)}" download="${safeName}" title="${dlLabel}" aria-label="${dlLabel}" onclick="event.stopPropagation()">${dlSvg}</a></span>`;
   }
   if(_SVG_EXTS.test(ref)) return `<img class="msg-media-svg" src="${esc(apiUrl)}" alt="${esc(altText===undefined?(typeof t==='function'?t('media_svg_label'):'svg'):altText)}" loading="lazy">`;
   if(localKind==='audio'||localKind==='video'){
@@ -8108,6 +8109,14 @@ function renderMd(raw){
   // Inline backtick spans: restore <code> tags produced in the stash callback above.
   // Must happen BEFORE bold/italic so **`code`** → <strong><code>code</code></strong>.
   s=s.replace(/\x00F(\d+)\x00/g,(_,i)=>fence_stash[+i]);
+  // Local Markdown artifacts use trusted markup from the shared MEDIA renderer.
+  // Keep it opaque through inline HTML escaping and the raw-tag sanitizer.
+  const mdImageStash=[];
+  const _renderMarkdownImage=(alt,url)=>{
+    if(!/^file:\/\//i.test(url))return _mdImageHtml(alt,url);
+    mdImageStash.push([alt,url]);
+    return '\x00I'+(mdImageStash.length-1)+'\x00';
+  };
   // inlineMd: process bold/italic/code/links within a single line of text.
   // Used inside list items and blockquotes where the text may already contain
   // HTML from the pre-pass → bold pipeline, so we cannot call esc() directly.
@@ -8124,7 +8133,7 @@ function renderMd(raw){
     // backticks stays protected as a \x00C token and is never rendered as <img>.
     // Must run before _code_stash restore and before _link_stash so the image
     // is not consumed by the [label](url) link regex.
-    t=t.replace(/!\[([^\]]*)\]\(((?:https?:\/\/|file:\/\/|data:image\/)[^\)]+)\)/g,(_,alt,url)=>(typeof _mdImageHtml==='function')?_mdImageHtml(alt,url):`<img src="${url.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`);
+    t=t.replace(/!\[([^\]]*)\]\(((?:https?:\/\/|file:\/\/|data:image\/)[^\)]+)\)/g,(_,alt,url)=>(typeof _mdImageHtml==='function')?_renderMarkdownImage(alt,url):`<img src="${url.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`);
     // Stash rendered <img> tags so autolink never matches URLs inside src=
     const _img_stash=[];
     t=t.replace(/(<img\b[^>]*>)/g,m=>{_img_stash.push(m);return `\x00G${_img_stash.length-1}\x00`;});
@@ -8353,7 +8362,7 @@ function renderMd(raw){
     if(!explicit&&!bare)return `![${alt}](${url})`;
     const normalized=bare?_bareHermesImageFileUri(decodedBare):url;
     if(normalized===null)return `![${alt}](${url})`;
-    return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
+    return(typeof _mdImageHtml==='function')?_renderMarkdownImage(alt,normalized):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
   });
   // Outer link pass for labeled links in plain paragraphs (outside table cells).
   // Runs AFTER the table pass so table cells are processed by inlineMd() only.
@@ -8569,6 +8578,7 @@ function renderMd(raw){
   s=s.replace(/\x00E(\d+)\x00/g,(_,i)=>_pre_stash[+i]);
   // ── Restore MEDIA stash → inline images or download links ─────────────────
   s=s.replace(/\x00D(\d+)\x00/g,(_,i)=>_inlineMediaHtmlForRef(media_stash[+i]));
+  s=s.replace(/\x00I(\d+)\x00/g,(_,i)=>_mdImageHtml(...mdImageStash[+i]));
 
   // ── End MEDIA restore ──────────────────────────────────────────────────────
   // Restore blockquote stash. Done last so the inner HTML (already produced

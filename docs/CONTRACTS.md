@@ -31,6 +31,7 @@ Chat Markdown supports image targets written as `![alt](target)`. The renderer a
 ```
 
 This narrow cache-path rule prevents root-relative web URLs (`/images/logo.png`), protocol-relative URLs (`//cdn.example/image.png`), traversal paths, and blank-paragraph joins from being interpreted as local media. Local references continue through the session-authorized `api/media` route.
+Recognized local Markdown images use the same generated-image presentation as `MEDIA:` images: a full-aspect-ratio image with a download action named for the file, while the Markdown label remains the image's alternative text.
 
 ## Runtime, durability, and state contracts
 
