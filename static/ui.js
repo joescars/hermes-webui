@@ -2838,17 +2838,17 @@ function _dataImageHtml(ref, altText){
 // MEDIA: pipeline uses, so ![x](file:///p.png) renders the artifact card instead
 // of the broken "!<a>" anchor it used to produce, and ![x](data:image/...) stops
 // dumping raw base64 text into the chat.
-function _mdImageHtml(alt, url){
+function _mdImageHtml(alt, url, downloadName){
   if(/^data:/i.test(url)){
     const img=_dataImageHtml(url, alt);
     if(img) return img;
     return esc(`![${alt}](${String(url).slice(0,64)}…)`);
   }
-  if(/^file:\/\//i.test(url)) return _inlineMediaHtmlForRef(url,undefined,alt);
+  if(/^file:\/\//i.test(url)) return _inlineMediaHtmlForRef(url,undefined,alt,downloadName);
   return `<img src="${url.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
 }
 
-function _inlineMediaHtmlForRef(ref, sessionId, altText){
+function _inlineMediaHtmlForRef(ref, sessionId, altText, downloadName){
   if(ref==null) return '';
   // data:image/* → inline <img>; any other data: scheme renders as inert
   // truncated text (never routed to api/media, never embedded).
@@ -2901,11 +2901,12 @@ function _inlineMediaHtmlForRef(ref, sessionId, altText){
   const localKind=_mediaKindForName(ref);
   // localArtifactCard(...)
   if(localKind==='image'){
-    const safeName=esc(altText===undefined?(ref.split('/').pop()||'image'):altText);
+    const safeName=esc(downloadName||(altText===undefined?(ref.split('/').pop()||'image'):altText));
+    const safeAlt=esc(altText===undefined?(downloadName||ref.split('/').pop()||'image'):altText);
     const tt=(typeof t==='function')?t:(key=>({media_download:'Download'}[key]||key));
     const dlLabel=esc(tt('media_download'));
     const dlSvg='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
-    return `<span class="msg-artifact-image"><img class="msg-media-img" src="${esc(apiUrl)}" alt="${safeName}" loading="lazy"><a class="msg-artifact-download" href="${esc(apiUrl)}" download="${safeName}" title="${dlLabel}" aria-label="${dlLabel}" onclick="event.stopPropagation()">${dlSvg}</a></span>`;
+    return `<span class="msg-artifact-image"><img class="msg-media-img" src="${esc(apiUrl)}" alt="${safeAlt}" loading="lazy"><a class="msg-artifact-download" href="${esc(apiUrl)}" download="${safeName}" title="${dlLabel}" aria-label="${dlLabel}" onclick="event.stopPropagation()">${dlSvg}</a></span>`;
   }
   if(_SVG_EXTS.test(ref)) return `<img class="msg-media-svg" src="${esc(apiUrl)}" alt="${esc(altText===undefined?(typeof t==='function'?t('media_svg_label'):'svg'):altText)}" loading="lazy">`;
   if(localKind==='audio'||localKind==='video'){
@@ -8353,7 +8354,7 @@ function renderMd(raw){
     if(!explicit&&!bare)return `![${alt}](${url})`;
     const normalized=bare?_bareHermesImageFileUri(decodedBare):url;
     if(normalized===null)return `![${alt}](${url})`;
-    return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
+    return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized,bare?decodedBare.split(/[?#]/)[0].split('/').pop():undefined):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
   });
   // Outer link pass for labeled links in plain paragraphs (outside table cells).
   // Runs AFTER the table pass so table cells are processed by inlineMd() only.
@@ -8487,7 +8488,7 @@ function renderMd(raw){
       return `<li${value}>`;
     }
     if(name==='span'){
-      return `<span${_cls(a.class,['task-done','task-todo','katex-inline'])}${a['data-katex']==='inline'?' data-katex="inline"':''}>`;
+      return `<span${_cls(a.class,['task-done','task-todo','katex-inline','msg-artifact-image'])}${a['data-katex']==='inline'?' data-katex="inline"':''}>`;
     }
     if(name==='div'){
       const cls=_cls(a.class,['pre-header','mermaid-block','katex-block']);
@@ -8499,7 +8500,7 @@ function renderMd(raw){
       if(!_isSafeUrl(a.href,false)) return '<a>';
       const target=a.target==='_blank'?' target="_blank"':'';
       const rel=a.rel==='noopener'?' rel="noopener"':'';
-      const cls=_cls(a.class,['msg-media-link','skill-linked-file','skill-file-back','session-link']);
+      const cls=_cls(a.class,['msg-media-link','skill-linked-file','skill-file-back','session-link','msg-artifact-download']);
       const download=a.download?` download="${esc(a.download)}"`:'';
       return `<a${cls} href="${esc(_safeAttrValue(a.href))}"${target}${rel}${download}>`;
     }

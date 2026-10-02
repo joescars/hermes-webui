@@ -133,6 +133,30 @@ def _check_markdown_code_rendering(page, renderer_path):
             "expectedImage": None,
         },
         {
+            "name": "MEDIA local image renders generated artifact card",
+            "markdown": "MEDIA:/home/joe/.hermes/cache/images/img_release_pipeline.png",
+            "expectedText": "",
+            "expectedCode": [],
+            "expectedArtifact": {
+                "alt": "img_release_pipeline.png",
+                "download": "img_release_pipeline.png",
+                "srcContains": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            },
+            "expectedImage": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+        },
+        {
+            "name": "bare cache image renders generated artifact card",
+            "markdown": "![Release pipeline]\n(/home/joe/.hermes/cache/images/img_release_pipeline.png)",
+            "expectedText": "",
+            "expectedCode": [],
+            "expectedArtifact": {
+                "alt": "Release pipeline",
+                "download": "img_release_pipeline.png",
+                "srcContains": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            },
+            "expectedImage": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+        },
+        {
             "name": "raw-code backtick before image and inline code",
             "markdown": "Type <code>`</code> then see ![i](https://e.x/i.png) and `x`.",
             "expectedText": "Type ` then see  and x.",
@@ -151,6 +175,13 @@ def _check_markdown_code_rendering(page, renderer_path):
             "code": Array.from(root.querySelectorAll('code'), node => node.textContent),
             "codeParents": Array.from(root.querySelectorAll('code'), node => node.parentElement.tagName),
             images: Array.from(root.querySelectorAll('img'), node => node.getAttribute('src')),
+            artifacts: Array.from(root.querySelectorAll('.msg-artifact-image'), wrapper => ({
+              className: wrapper.className,
+              alt: wrapper.querySelector('img')?.getAttribute('alt'),
+              src: wrapper.querySelector('img')?.getAttribute('src'),
+              download: wrapper.querySelector('a.msg-artifact-download')?.getAttribute('download'),
+              basename: (() => { try { return new URL(wrapper.querySelector('img')?.getAttribute('src'), document.baseURI).pathname.split('/').pop(); } catch (_) { return ''; } })(),
+            })),
             "html": root.innerHTML,
             "leakedStash": /\\u0000F\\d+\\u0000|\\bF\\d+\\b/.test(root.textContent),
           };
@@ -165,6 +196,17 @@ def _check_markdown_code_rendering(page, renderer_path):
             failures.append(f"{case['name']}: code={result['code']!r}")
         if "expectedCodeParents" in case and result["codeParents"] != case["expectedCodeParents"]:
             failures.append(f"{case['name']}: code parents={result['codeParents']!r}; html={result['html']!r}")
+        if "expectedArtifact" in case:
+            expected_artifact = case["expectedArtifact"]
+            if len(result["artifacts"]) != 1:
+                failures.append(f"{case['name']}: artifacts={result['artifacts']!r}; html={result['html']!r}")
+            else:
+                artifact = result["artifacts"][0]
+                for key in ("alt", "download"):
+                    if artifact[key] != expected_artifact[key]:
+                        failures.append(f"{case['name']}: artifact {key}={artifact[key]!r}")
+                if expected_artifact["srcContains"] not in artifact["src"]:
+                    failures.append(f"{case['name']}: artifact src={artifact['src']!r}")
         expected_images = [case["expectedImage"]] if case["expectedImage"] else []
         if result["images"] != expected_images:
             failures.append(f"{case['name']}: images={result['images']!r}; html={result['html']!r}")
