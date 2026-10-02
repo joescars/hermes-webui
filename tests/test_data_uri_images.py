@@ -145,6 +145,26 @@ def test_markdown_image_with_line_break_before_bare_cache_path_renders_inline(dr
 @pytest.mark.parametrize(
     "markdown",
     [
+        "![Release pipeline]\n(/home/joe/.hermes/cache/images/img_release_pipeline.png)",
+        "![Release pipeline](file:///home/joe/.hermes/cache/images/img_release_pipeline.png)",
+        "| image |\n| --- |\n| ![Release pipeline](file:///home/joe/.hermes/cache/images/img_release_pipeline.png) |",
+    ],
+    ids=["bare-cache-path", "file-uri", "table-file-uri"],
+)
+def test_local_markdown_image_matches_media_artifact(driver_path, markdown):
+    html = _render(driver_path, markdown)
+    media_html = _render(driver_path, "MEDIA:/home/joe/.hermes/cache/images/img_release_pipeline.png")
+    for rendered in (html, media_html):
+        assert '<span class="msg-artifact-image">' in rendered
+        assert 'class="msg-artifact-download"' in rendered
+        assert 'download="img_release_pipeline.png"' in rendered
+    assert 'alt="Release pipeline"' in html
+    assert 'api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png' in html
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
         "`![x](/home/joe/.hermes/cache/images/x.png)`",
         "- `![x](/home/joe/.hermes/cache/images/x.png)`",
         "| code |\n| --- |\n| `![x](/home/joe/.hermes/cache/images/x.png)` |",
