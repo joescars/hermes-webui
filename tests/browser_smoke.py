@@ -33,12 +33,14 @@ EXIT CODES
   2 — environment/setup failure (server didn't boot, playwright missing, etc.)
 """
 import os
+import struct
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
 import urllib.error
+import zlib
 
 PORT = int(os.getenv("SMOKE_PORT", "8796"))
 BASE = f"http://127.0.0.1:{PORT}"
@@ -81,8 +83,25 @@ def _wait_for_health(timeout=30):
 
 def _check_markdown_code_rendering(page, renderer_path):
     """Exercise raw-code/backtick edge cases through the production renderer."""
-    page.goto("about:blank")
+    page.goto(BASE + "/", wait_until="domcontentloaded")
     page.add_script_tag(path=renderer_path)
+    if not page.evaluate("typeof renderMd === 'function'"):
+        return ["production renderMd() failed to load in the browser harness"]
+    width, height = 640, 280
+    style_path = os.path.join(os.path.dirname(renderer_path), "style.css")
+    raw_row = bytes([0]) + bytes([0, 127, 255, 255]) * width
+    def png_chunk(kind, payload):
+        import binascii
+        data = kind + payload
+        return struct.pack(">I", len(payload)) + data + struct.pack(">I", binascii.crc32(data) & 0xffffffff)
+    png_fixture = (
+        bytes.fromhex("89504e470d0a1a0a")
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(raw_row * height))
+        + png_chunk(b"IEND", b"")
+    )
+    page.add_style_tag(path=style_path)
+    page.route("**/api/media?*", lambda route: route.fulfill(status=200, content_type="image/png", body=png_fixture))
     if not page.evaluate("typeof renderMd === 'function'"):
         return ["production renderMd() failed to load in the browser harness"]
     inputs = [
@@ -134,27 +153,66 @@ def _check_markdown_code_rendering(page, renderer_path):
         },
         {
             "name": "MEDIA local image renders generated artifact card",
-            "markdown": "MEDIA:/home/joe/.hermes/cache/images/img_release_pipeline.png",
+            "markdown": "MEDIA:/workspace/user/.hermes/cache/images/img_release_pipeline.png",
             "expectedText": "",
             "expectedCode": [],
             "expectedArtifact": {
                 "alt": "img_release_pipeline.png",
                 "download": "img_release_pipeline.png",
-                "srcContains": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+                "accessibleName": "Download",
+                "icon": True,
+                "srcContains": "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
             },
-            "expectedImage": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            "expectedImage": "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            "expectedImageShape": {"width": 640, "height": 280, "fit": "contain"},
         },
         {
             "name": "bare cache image renders generated artifact card",
-            "markdown": "![Release pipeline]\n(/home/joe/.hermes/cache/images/img_release_pipeline.png)",
+            "markdown": "![Release pipeline]\n(/workspace/user/.hermes/cache/images/img_release_pipeline.png)",
             "expectedText": "",
             "expectedCode": [],
             "expectedArtifact": {
                 "alt": "Release pipeline",
                 "download": "img_release_pipeline.png",
-                "srcContains": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+                "accessibleName": "Download",
+                "icon": True,
+                "srcContains": "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
             },
-            "expectedImage": "api/media?path=%2Fhome%2Fjoe%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            "expectedImage": "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            "expectedImageShape": {"width": 640, "height": 280, "fit": "contain"},
+        },
+        {
+            "name": "file cache image renders generated artifact card with basename",
+            "markdown": "![Release pipeline](file:///workspace/user/.hermes/cache/images/img_release_pipeline.png)",
+            "expectedText": "",
+            "expectedCode": [],
+            "expectedArtifact": {
+                "alt": "Release pipeline",
+                "download": "img_release_pipeline.png",
+                "accessibleName": "Download",
+                "icon": True,
+                "srcContains": "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            },
+            "expectedImage": "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fimg_release_pipeline.png",
+            "expectedImageShape": {"width": 640, "height": 280, "fit": "contain"},
+        },
+        {
+            "name": "raw SVG and event handlers remain sanitized",
+            "markdown": '<span class="msg-artifact-image"><a aria-label="Download" onclick="alert(1)"><svg onload="alert(1)"></svg></a></span>',
+            "expectedText": "",
+            "expectedCode": [],
+            "expectedArtifact": None,
+            "expectedImage": None,
+            "forbiddenHtml": ["<svg", "<script", "onclick=", "aria-label=", "msg-artifact-download"],
+        },
+        {
+            "name": "raw artifact download class stays a visible ordinary link",
+            "markdown": '<a class="msg-artifact-download" href="https://example.test/report.png">visible model link</a>',
+            "expectedText": "visible model link",
+            "expectedCode": [],
+            "expectedArtifact": None,
+            "expectedImage": None,
+            "expectedLink": {"text": "visible model link", "href": "https://example.test/report.png", "className": ""},
         },
         {
             "name": "raw-code backtick before image and inline code",
@@ -165,27 +223,47 @@ def _check_markdown_code_rendering(page, renderer_path):
         },
     ]
     results = page.evaluate(
-        """(inputs) => inputs.map(input => {
+        """async (inputs) => Promise.all(inputs.map(async input => {
           if (typeof renderMd !== 'function') throw new Error('renderMd is unavailable');
           const root = document.createElement('div');
           root.innerHTML = renderMd(input.markdown);
+          const images = Array.from(root.querySelectorAll('img'));
+          const imageLoads = Promise.all(images.map(image => new Promise(resolve => {
+            if (!(image.getAttribute('src') || '').startsWith('api/media?')) { resolve(null); return; }
+            image.loading = 'eager';
+            image.onload = () => resolve({width:image.naturalWidth,height:image.naturalHeight});
+            image.onerror = () => resolve({width:0,height:0});
+          })));
+          document.body.appendChild(root);
+          const dimensions = await imageLoads;
           return {
             name: input.name,
             text: root.textContent,
             "code": Array.from(root.querySelectorAll('code'), node => node.textContent),
             "codeParents": Array.from(root.querySelectorAll('code'), node => node.parentElement.tagName),
             images: Array.from(root.querySelectorAll('img'), node => node.getAttribute('src')),
+            imageMetrics: Array.from(root.querySelectorAll('.msg-artifact-image img'), (node, index) => ({
+              width: dimensions[images.indexOf(node)]?.width ?? 0,
+              height: dimensions[images.indexOf(node)]?.height ?? 0,
+              fit: node.style.objectFit || getComputedStyle(node).objectFit,
+            })),
+            links: Array.from(root.querySelectorAll('a'), anchor => ({
+              text: anchor.textContent.trim(),
+              href: anchor.getAttribute('href'),
+              className: anchor.className,
+            })),
             artifacts: Array.from(root.querySelectorAll('.msg-artifact-image'), wrapper => ({
               className: wrapper.className,
               alt: wrapper.querySelector('img')?.getAttribute('alt'),
               src: wrapper.querySelector('img')?.getAttribute('src'),
               download: wrapper.querySelector('a.msg-artifact-download')?.getAttribute('download'),
+              accessibleName: wrapper.querySelector('a.msg-artifact-download')?.getAttribute('aria-label') || wrapper.querySelector('a.msg-artifact-download')?.textContent.trim() || '',
+              icon: !!wrapper.querySelector('a.msg-artifact-download svg'),
               basename: (() => { try { return new URL(wrapper.querySelector('img')?.getAttribute('src'), document.baseURI).pathname.split('/').pop(); } catch (_) { return ''; } })(),
             })),
             "html": root.innerHTML,
             "leakedStash": /\\u0000F\\d+\\u0000|\\bF\\d+\\b/.test(root.textContent),
-          };
-        })""",
+          }; }))""",
         inputs,
     )
     failures = []
@@ -196,17 +274,35 @@ def _check_markdown_code_rendering(page, renderer_path):
             failures.append(f"{case['name']}: code={result['code']!r}")
         if "expectedCodeParents" in case and result["codeParents"] != case["expectedCodeParents"]:
             failures.append(f"{case['name']}: code parents={result['codeParents']!r}; html={result['html']!r}")
-        if "expectedArtifact" in case:
+        if case.get("expectedArtifact") is not None:
             expected_artifact = case["expectedArtifact"]
             if len(result["artifacts"]) != 1:
                 failures.append(f"{case['name']}: artifacts={result['artifacts']!r}; html={result['html']!r}")
             else:
                 artifact = result["artifacts"][0]
-                for key in ("alt", "download"):
+                for key in ("alt", "download", "accessibleName"):
                     if artifact[key] != expected_artifact[key]:
                         failures.append(f"{case['name']}: artifact {key}={artifact[key]!r}")
+                if artifact["icon"] is not expected_artifact["icon"]:
+                    failures.append(f"{case['name']}: artifact icon={artifact['icon']!r}")
                 if expected_artifact["srcContains"] not in artifact["src"]:
                     failures.append(f"{case['name']}: artifact src={artifact['src']!r}")
+        if case.get("expectedLink"):
+            expected_link = case["expectedLink"]
+            matching_links = [link for link in result["links"] if link["text"] == expected_link["text"]]
+            if not matching_links:
+                failures.append(f"{case['name']}: visible link missing; links={result['links']!r}; html={result['html']!r}")
+            else:
+                link = matching_links[0]
+                if link["href"] != expected_link["href"] or link["className"] != expected_link["className"]:
+                    failures.append(f"{case['name']}: link={link!r}")
+        for forbidden in case.get("forbiddenHtml", []):
+            if forbidden.lower() in result["html"].lower():
+                failures.append(f"{case['name']}: forbidden output {forbidden!r}; html={result['html']!r}")
+        if case.get("expectedImageShape"):
+            expected_shape = case["expectedImageShape"]
+            if len(result["imageMetrics"]) != 1 or result["imageMetrics"][0] != expected_shape:
+                failures.append(f"{case['name']}: image metrics={result['imageMetrics']!r}; expected={expected_shape!r}")
         expected_images = [case["expectedImage"]] if case["expectedImage"] else []
         if result["images"] != expected_images:
             failures.append(f"{case['name']}: images={result['images']!r}; html={result['html']!r}")

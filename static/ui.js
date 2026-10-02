@@ -2844,7 +2844,10 @@ function _mdImageHtml(alt, url, downloadName){
     if(img) return img;
     return esc(`![${alt}](${String(url).slice(0,64)}…)`);
   }
-  if(/^file:\/\//i.test(url)) return _inlineMediaHtmlForRef(url,undefined,alt,downloadName);
+  if(/^file:\/\//i.test(url)){
+    const safeDownloadName=downloadName||(()=>{try{return decodeURIComponent(new URL(url).pathname).split('/').pop();}catch(_){return undefined;}})();
+    return _inlineMediaHtmlForRef(url,undefined,alt,safeDownloadName);
+  }
   return `<img src="${url.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
 }
 
@@ -8109,6 +8112,20 @@ function renderMd(raw){
   // Inline backtick spans: restore <code> tags produced in the stash callback above.
   // Must happen BEFORE bold/italic so **`code`** → <strong><code>code</code></strong>.
   s=s.replace(/\x00F(\d+)\x00/g,(_,i)=>fence_stash[+i]);
+  const _generatedArtifactStash=[];
+  let _generatedArtifactTokenPrefix;
+  do{_generatedArtifactTokenPrefix='HERMESARTIFACT'+Math.random().toString(36).slice(2)+'END';}while(s.includes(_generatedArtifactTokenPrefix));
+  const _stashGeneratedArtifact=(html)=>{
+    if(!/^<span class="msg-artifact-image">[\s\S]*<\/span>$/.test(String(html||'')))return html;
+    const index=_generatedArtifactStash.push(html)-1;
+    return _generatedArtifactTokenPrefix+index+'ENDTOKEN';
+  };
+  const _restoreGeneratedArtifacts=()=>{
+    for(let i=0;i<_generatedArtifactStash.length;i++){
+      const token=_generatedArtifactTokenPrefix+i+'ENDTOKEN';
+      s=s.split(token).join(_generatedArtifactStash[i]);
+    }
+  };
   // inlineMd: process bold/italic/code/links within a single line of text.
   // Used inside list items and blockquotes where the text may already contain
   // HTML from the pre-pass → bold pipeline, so we cannot call esc() directly.
@@ -8354,7 +8371,11 @@ function renderMd(raw){
     if(!explicit&&!bare)return `![${alt}](${url})`;
     const normalized=bare?_bareHermesImageFileUri(decodedBare):url;
     if(normalized===null)return `![${alt}](${url})`;
-    return(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized,bare?decodedBare.split(/[?#]/)[0].split('/').pop():undefined):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
+    const downloadName=bare
+      ? decodedBare.split(/[?#]/)[0].split('/').pop()
+      : (/^file:\/\//i.test(url)?(()=>{try{return decodeURIComponent(new URL(url).pathname).split('/').pop();}catch(_){return undefined;}})():undefined);
+    const trustedArtifact=(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized,downloadName):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
+    return normalized.startsWith('file://')?_stashGeneratedArtifact(trustedArtifact):trustedArtifact;
   });
   // Outer link pass for labeled links in plain paragraphs (outside table cells).
   // Runs AFTER the table pass so table cells are processed by inlineMd() only.
@@ -8488,7 +8509,7 @@ function renderMd(raw){
       return `<li${value}>`;
     }
     if(name==='span'){
-      return `<span${_cls(a.class,['task-done','task-todo','katex-inline','msg-artifact-image'])}${a['data-katex']==='inline'?' data-katex="inline"':''}>`;
+      return `<span${_cls(a.class,['task-done','task-todo','katex-inline'])}${a['data-katex']==='inline'?' data-katex="inline"':''}>`;
     }
     if(name==='div'){
       const cls=_cls(a.class,['pre-header','mermaid-block','katex-block']);
@@ -8500,7 +8521,7 @@ function renderMd(raw){
       if(!_isSafeUrl(a.href,false)) return '<a>';
       const target=a.target==='_blank'?' target="_blank"':'';
       const rel=a.rel==='noopener'?' rel="noopener"':'';
-      const cls=_cls(a.class,['msg-media-link','skill-linked-file','skill-file-back','session-link','msg-artifact-download']);
+      const cls=_cls(a.class,['msg-media-link','skill-linked-file','skill-file-back','session-link']);
       const download=a.download?` download="${esc(a.download)}"`:'';
       return `<a${cls} href="${esc(_safeAttrValue(a.href))}"${target}${rel}${download}>`;
     }
@@ -8531,8 +8552,6 @@ function renderMd(raw){
     return `<a href="${clean}" target="_blank" rel="noopener">${esc(clean)}</a>${trail}`;
   });
   s=s.replace(/\x00B(\d+)\x00/g,(_,i)=>_al_stash[+i]);
-  // Raw <code> elements stay opaque through all Markdown passes; restore their
-  // escaped contents only after Markdown links/images and autolinking are done.
   s=s.replace(/\x00RC(\d+)\x00/g,(_,i)=>`<code>${esc(rawCodeStash[+i]).replace(/`/g,'&#96;')}</code>`);
 
   // These will be rendered by renderKatexBlocks() after DOM insertion
@@ -8568,6 +8587,9 @@ function renderMd(raw){
   const parts=s.split(/\n{2,}/);
   s=parts.map(p=>{p=p.trim();if(!p)return '';if(/^<(h[1-6]|ul|ol|table|pre|hr|blockquote)|^\x00[EQ]/.test(p))return p;return `<p>${p.replace(/\n/g,'<br>')}</p>`;}).join('\n');
   s=s.replace(/\x00E(\d+)\x00/g,(_,i)=>_pre_stash[+i]);
+  // Only the trusted generated card is restored after the sanitizer and every
+  // later Markdown/text transformation; raw/model HTML cannot populate this stash.
+  s=s.replace(/\x00Z(\d+)\x00/g,(_,i)=>_generatedArtifactStash[+i]);
   // ── Restore MEDIA stash → inline images or download links ─────────────────
   s=s.replace(/\x00D(\d+)\x00/g,(_,i)=>_inlineMediaHtmlForRef(media_stash[+i]));
 
@@ -8576,6 +8598,7 @@ function renderMd(raw){
   // by the recursive renderMd in the pre-pass) is dropped into the final
   // string verbatim — no further passes can mangle it.
   s=s.replace(/\x00Q(\d+)\x00/g,(_,i)=>_bq_stash[+i]);
+  _restoreGeneratedArtifacts();
   return s;
 }
 
