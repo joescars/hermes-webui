@@ -30,7 +30,7 @@ Chat Markdown supports image targets written as `![alt](target)`. The renderer a
 (/home/user/.hermes/cache/images/mai_example.png)
 ```
 
-This narrow cache-path rule prevents root-relative web URLs (`/images/logo.png`), protocol-relative URLs (`//cdn.example/image.png`), traversal paths, and blank-paragraph joins from being interpreted as local media. Local references continue through the session-authorized `api/media` route. Bare cache-image references render as generated-image artifacts: the displayed image retains the Markdown alt text, while its download action uses the cache file's basename, matching `MEDIA:` image presentation.
+This narrow cache-path rule prevents root-relative web URLs (`/images/logo.png`), protocol-relative URLs (`//cdn.example/image.png`), traversal paths, and blank-paragraph joins from being interpreted as local media. Local references continue through the session-authorized `api/media` route. Bare cache-image references and explicit `file://` image references render as generated-image artifacts: the displayed image retains the Markdown alt text, while its download action uses the decoded file basename. The generated artifact markup is preserved intact across sanitization; model-authored raw HTML remains subject to the normal sanitizer rules.
 
 ## Runtime, durability, and state contracts
 
