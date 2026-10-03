@@ -84,15 +84,15 @@ def _wait_for_health(timeout=30):
 def _check_markdown_code_rendering(page):
     """Exercise raw-code/backtick edge cases through the production renderer.
 
-    The real app already loads ``static/ui.js`` (and its stylesheet), so this
-    reuses the page's own ``renderMd()``. Injecting the bundle a second time
-    redeclares its top-level lexical bindings (e.g. ``_recycleStash``) and
-    throws a page error, which the smoke gate correctly reports as a failure.
+    The caller has already opened the real app, which loads ``static/ui.js``
+    and its stylesheet. This helper reuses that page's ``renderMd()``; injecting
+    the bundle again would redeclare its top-level lexical bindings (e.g.
+    ``_recycleStash``) and throw a page error.
     """
-    page.goto(BASE + "/", wait_until="domcontentloaded")
-    # ui.js ships as a deferred classic script; DOMContentLoaded fires after it
-    # executes, but wait explicitly so a slow load does not look like a setup
-    # failure. Production renderMd() comes from the app itself, never a re-add.
+    # ui.js is a deferred classic script; the caller's navigation waits for
+    # DOMContentLoaded, then gives boot time before calling this helper. Wait
+    # explicitly for the production renderer so slow script loading is a clear
+    # setup failure, without reloading the page or re-adding the bundle.
     try:
         page.wait_for_function("typeof renderMd === 'function'", timeout=10000)
     except Exception:
