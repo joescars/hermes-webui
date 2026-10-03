@@ -8384,7 +8384,7 @@ function renderMd(raw){
   // Restrict that compatibility form to decoded image files below a cache/images
   // segment; root-relative web URLs, protocol-relative URLs, traversal, malformed
   // escapes, and tilde paths remain inert.
-  const _bareHermesImageCacheRe=/^\/(?!\/)[^\)\r\n]*\/cache\/images\/[^\/()\r\n]+\.(?:png|jpe?g|gif|webp|avif|bmp|ico)(?:[?#][^\)\r\n]*)?$/i;
+  const _bareHermesImageCacheRe=/^\/(?!\/)[^\)\r\n]*\/cache\/images\/[^\/()\r\n]+\.(?:png|jpe?g|gif|webp|avif|bmp|ico)$/i;
   const _decodeBareHermesImagePath=(raw)=>{
     const value=String(raw||'').trim();
     if(value.startsWith('~')||value.includes('\\'))return null;
@@ -8421,7 +8421,7 @@ function renderMd(raw){
     const normalized=bare?_bareHermesImageFileUri(decodedBare):url;
     if(normalized===null)return `![${alt}](${url})`;
     const downloadName=bare
-      ? decodedBare.split(/[?#]/)[0].split('/').pop()
+      ? decodedBare.split('/').pop()
       : (/^file:\/\//i.test(url)?(()=>{try{return decodeURIComponent(new URL(url).pathname).split('/').pop();}catch(_){return undefined;}})():undefined);
     const trustedArtifact=(typeof _mdImageHtml==='function')?_mdImageHtml(alt,normalized,downloadName):`<img src="${normalized.replace(/"/g,'%22')}" alt="${esc(alt)}" class="msg-media-img" loading="lazy">`;
     return normalized.startsWith('file://')?_stashGeneratedArtifact(trustedArtifact):trustedArtifact;

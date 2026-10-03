@@ -110,6 +110,9 @@ def _check_markdown_code_rendering(page):
         + png_chunk(b"IEND", b"")
     )
     page.route("**/api/media?*", lambda route: route.fulfill(status=200, content_type="image/png", body=png_fixture))
+    # Keep the explicit HTTPS renderer case deterministic and offline too; the
+    # browser must never fetch a placeholder host during this smoke check.
+    page.route("https://e.x/i.png", lambda route: route.fulfill(status=200, content_type="image/png", body=png_fixture))
     if not page.evaluate("typeof renderMd === 'function'"):
         return ["production renderMd() is unavailable on the app page"]
     inputs = [

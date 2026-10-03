@@ -231,6 +231,22 @@ def test_markdown_backslash_cache_traversal_stays_inert(driver_path):
     assert '<img' not in html
 
 
+@pytest.mark.parametrize(
+    "filename,encoded_filename",
+    [
+        ("photo#draft.png", "photo%23draft.png"),
+        ("photo?draft.png", "photo%3Fdraft.png"),
+    ],
+    ids=["hash", "question-mark"],
+)
+def test_markdown_bare_cache_filename_with_url_delimiter_keeps_full_basename(
+    driver_path, filename, encoded_filename
+):
+    html = _render(driver_path, f"![photo]\n(/workspace/user/.hermes/cache/images/{filename})")
+    assert f"api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2F{encoded_filename}" in html
+    assert f'download="{filename}"' in html
+
+
 def test_markdown_percent_filename_renders_inline(driver_path):
     html = _render(driver_path, "![photo]\n(/workspace/user/.hermes/cache/images/photo%25done.png)")
     assert "api/media?path=%2Fworkspace%2Fuser%2F.hermes%2Fcache%2Fimages%2Fphoto%25done.png" in html
