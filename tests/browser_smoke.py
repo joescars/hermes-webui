@@ -81,14 +81,23 @@ def _wait_for_health(timeout=30):
     return False
 
 
-def _check_markdown_code_rendering(page, renderer_path):
-    """Exercise raw-code/backtick edge cases through the production renderer."""
+def _check_markdown_code_rendering(page):
+    """Exercise raw-code/backtick edge cases through the production renderer.
+
+    The real app already loads ``static/ui.js`` (and its stylesheet), so this
+    reuses the page's own ``renderMd()``. Injecting the bundle a second time
+    redeclares its top-level lexical bindings (e.g. ``_recycleStash``) and
+    throws a page error, which the smoke gate correctly reports as a failure.
+    """
     page.goto(BASE + "/", wait_until="domcontentloaded")
-    page.add_script_tag(path=renderer_path)
-    if not page.evaluate("typeof renderMd === 'function'"):
-        return ["production renderMd() failed to load in the browser harness"]
+    # ui.js ships as a deferred classic script; DOMContentLoaded fires after it
+    # executes, but wait explicitly so a slow load does not look like a setup
+    # failure. Production renderMd() comes from the app itself, never a re-add.
+    try:
+        page.wait_for_function("typeof renderMd === 'function'", timeout=10000)
+    except Exception:
+        return ["production renderMd() is unavailable on the app page"]
     width, height = 640, 280
-    style_path = os.path.join(os.path.dirname(renderer_path), "style.css")
     raw_row = bytes([0]) + bytes([0, 127, 255, 255]) * width
     def png_chunk(kind, payload):
         import binascii
@@ -100,10 +109,9 @@ def _check_markdown_code_rendering(page, renderer_path):
         + png_chunk(b"IDAT", zlib.compress(raw_row * height))
         + png_chunk(b"IEND", b"")
     )
-    page.add_style_tag(path=style_path)
     page.route("**/api/media?*", lambda route: route.fulfill(status=200, content_type="image/png", body=png_fixture))
     if not page.evaluate("typeof renderMd === 'function'"):
-        return ["production renderMd() failed to load in the browser harness"]
+        return ["production renderMd() is unavailable on the app page"]
     inputs = [
         {
             "name": "backticks in separate raw code elements",
@@ -379,9 +387,7 @@ def main():
 
                 if path == "/":
                     try:
-                        renderer_failures = _check_markdown_code_rendering(
-                            page, os.path.join(repo_root, "static", "ui.js")
-                        )
+                        renderer_failures = _check_markdown_code_rendering(page)
                         failures.extend(f"  [markdown renderer] {failure}" for failure in renderer_failures)
                         if not renderer_failures:
                             print("OK  Markdown renderer regressions — Chromium + production renderMd()")
